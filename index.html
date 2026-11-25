@@ -96,6 +96,11 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
 .pixqr{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;margin-top:10px}.pixqr img{width:120px;height:120px;background:#fff;border-radius:8px;padding:4px}.pixqr .pix{margin-top:0}
 .pix{margin-top:10px;padding:10px 12px;border:2px dashed var(--brand);border-radius:10px;background:var(--soft);font-size:15px}
 .cusmode .item .ic{display:block;font-size:13px}.cusmode .item .r b{display:none}
+.item .r s{font-size:12px;color:var(--mut,#777)}.cusmode .item .r s,.cusmode .dsc{display:none}
+.dsc{display:flex;gap:4px;align-items:center;font-size:12px;color:#555}.dsc input{width:62px;height:30px;border:1px solid var(--line);border-radius:8px;padding:0 6px;font-size:14px;text-align:right}.dsc select{height:30px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--card)}
+.sum .odsc{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}.sum .odsc .dsc{font-size:14px}.dline{color:#c2571a;font-size:14px}
+.neg{color:#c62828!important}
+.sum .row[hidden]{display:none}
 .sum{border-top:2px solid var(--brand);padding:12px 16px;background:var(--card)}
 .sum .row{display:flex;justify-content:space-between;gap:10px}
 .sum .tot{font-size:22px;font-weight:800;color:var(--brand2)}
@@ -179,6 +184,9 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
     <div class="sum">
       <button class="btn pri" id="saleBtn" style="width:100%;justify-content:center;background:#2e7d32;border-color:#2e7d32;margin-bottom:10px">✔ Virou venda: registrar</button>
       <div class="vcli">
+      <div class="row" id="subRow" style="font-size:14px"><span>Subtotal</span><span id="tSub">R$ 0,00</span></div>
+      <div class="odsc"><span>Desconto no pedido</span><span class="dsc"><input id="oDv" inputmode="decimal" placeholder="0" aria-label="Desconto no pedido"><select id="oDt" aria-label="Tipo de desconto"><option value="%">%</option><option value="R">R$</option></select></span></div>
+      <div class="row dline" id="oDrow" hidden><span>Desconto</span><span id="tDsc"></span></div>
       <div class="row"><span>Total para o cliente</span><span class="tot" id="tCli">R$ 0,00</span></div>
       <div class="row cr"><span>Seu custo <span class="pn"></span></span><span id="tCost"></span></div>
       <div class="row cr"><b>Lucro estimado</b><b id="tLucro"></b></div>
@@ -3015,7 +3023,7 @@ function ini(n){return (n.match(/[A-Za-zÀ-ú]+/g)||['SA']).slice(0,2).map(w=>w[
 document.addEventListener('error',e=>{const t=e.target;if(t.tagName==='IMG'&&t.dataset.fb!=null){const d=document.createElement('div');d.className='noimg';d.textContent=t.dataset.fb;t.replaceWith(d)}},true);
 
 const costHTML=p=>`<div class="costs">Seu custo ${PN()}: <b>${brl(cost(p))}</b>${p.vr!=null?`<br>Lucro: <b>${brl(r2(p.vr-cost(p)))}</b>`:''}</div>`;
-const addHTML=p=>`<div class="add"><div class="qty"><button data-dq="${esc(p.sku)}" data-d="-1" aria-label="Menos">−</button><input data-qi="${esc(p.sku)}" inputmode="numeric" value="1" aria-label="Quantidade"><button data-dq="${esc(p.sku)}" data-d="1" aria-label="Mais">+</button></div><button class="btn pri" data-add="${esc(p.sku)}">${cart[p.sku]?'✓ '+cart[p.sku]+' no orç.':'Adicionar'}</button></div>`;
+const addHTML=p=>`<div class="add"><div class="qty"><button data-dq="${esc(p.sku)}" data-d="-1" aria-label="Menos">−</button><input data-qi="${esc(p.sku)}" inputmode="decimal" value="1" aria-label="Quantidade"><button data-dq="${esc(p.sku)}" data-d="1" aria-label="Mais">+</button></div><button class="btn pri" data-add="${esc(p.sku)}">${cart[p.sku]?'✓ '+fq(cart[p.sku])+' no orç.':'Adicionar'}</button></div>`;
 
 function run(){
   const qraw=norm(qIn.value).replace(/ /g,''), qt=toks(qIn.value).map(w=>w==='s'?'sao':w);
@@ -3054,31 +3062,51 @@ function applyView(){$('#viewBtn').textContent=view==='grid'?'☰ Lista':'▦ Gr
 
 /* ---------- orçamento ---------- */
 const lines=()=>Object.entries(cart).map(([s,q])=>({p:BY[s],q})).filter(l=>l.p);
+const r3=v=>Math.round(v*1000)/1000;
+const pq=v=>{const n=parseFloat(String(v??'').trim().replace(/\s/g,'').replace(',','.'));return isFinite(n)?r3(n):NaN};
+const fq=q=>Number(q).toLocaleString('pt-BR',{maximumFractionDigits:3});
+let disc=store.get('disc',{}), odisc=store.get('odisc',{v:0,t:'%'});
+const dval=(d,base)=>{if(!d||!(d.v>0)||!(base>0))return 0;return r2(Math.min(base,d.t==='R'?d.v:base*Math.min(d.v,100)/100))};
+const dlabel=d=>d&&d.v>0?(d.t==='R'?brl(d.v):fq(d.v)+'%'):'';
+/* calcula linhas, descontos e totais do orçamento do cliente */
+function calc(){
+  const L=lines().map(l=>{const bruto=l.p.vr==null?0:r2(l.p.vr*l.q),d=dval(disc[l.p.sku],bruto);return {...l,bruto,d,liq:r2(bruto-d)}});
+  const bruto=r2(L.reduce((a,l)=>a+l.bruto,0)),sub=r2(L.reduce((a,l)=>a+l.liq,0)),od=dval(odisc,sub),total=r2(sub-od);
+  const idsc=r2(bruto-sub);
+  for(const l of L)l.fin=sub>0?r2(l.liq-od*l.liq/sub):0;
+  return {L,bruto,sub,idsc,od,total,cons:L.some(l=>l.p.vr==null)};
+}
 function cartUI(){
   store.set('cart',cart);
-  const L=lines(); let tc=0,td=0,ts=0,cons=false;
-  $('#cartN').textContent=L.reduce((a,l)=>a+l.q,0);
-  $('#items').innerHTML=L.length?L.map(({p,q})=>{ if(p.vr==null)cons=true; tc+=(p.vr||0)*q; td+=r2(p.at*DROP)*q; ts+=r2(p.at*SCALE)*q;
+  for(const s in disc)if(!cart[s])delete disc[s]; store.set('disc',disc); store.set('odisc',odisc);
+  const C=calc(),L=C.L; let td=0,ts=0;
+  $('#cartN').textContent=L.length;
+  $('#items').innerHTML=L.length?L.map(({p,q,bruto,d,liq})=>{ td+=r2(p.at*DROP)*q; ts+=r2(p.at*SCALE)*q; const ds=disc[p.sku]||{};
     return `<div class="item">${imgTag(p)}<div><div class="nm">${esc(p.nome)}</div><div class="sku">${esc(p.sku)} · ${brl(p.vr)} / ${esc(p.un)}</div>
-    <div class="ic">Seu custo ${PN()}: ${brl(r2(cost(p)*q))} (${brl(cost(p))} un.)</div></div>
-    <div class="r"><b>${p.vr==null?'Consulte':brl(r2(p.vr*q))}</b><div class="qty"><button data-cq="${esc(p.sku)}" data-d="-1" aria-label="Menos">−</button><input data-ci="${esc(p.sku)}" inputmode="numeric" value="${q}" aria-label="Quantidade"><button data-cq="${esc(p.sku)}" data-d="1" aria-label="Mais">+</button></div><button class="rm" data-rm="${esc(p.sku)}">Remover</button></div></div>`}).join('')
+    <div class="ic">Seu custo ${PN()}: ${brl(r2(cost(p)*q))} (${brl(cost(p))} un.)</div>
+    <div class="dsc">Desconto <input data-dv="${esc(p.sku)}" inputmode="decimal" placeholder="0" value="${ds.v>0?fq(ds.v):''}" aria-label="Desconto no item"><select data-dt="${esc(p.sku)}" aria-label="Tipo de desconto"><option value="%"${ds.t!=='R'?' selected':''}>%</option><option value="R"${ds.t==='R'?' selected':''}>R$</option></select></div></div>
+    <div class="r">${d>0?`<s>${brl(bruto)}</s>`:''}<b>${p.vr==null?'Consulte':brl(liq)}</b><div class="qty"><button data-cq="${esc(p.sku)}" data-d="-1" aria-label="Menos">−</button><input data-ci="${esc(p.sku)}" inputmode="decimal" value="${fq(q)}" aria-label="Quantidade"><button data-cq="${esc(p.sku)}" data-d="1" aria-label="Mais">+</button></div><button class="rm" data-rm="${esc(p.sku)}">Remover</button></div></div>`}).join('')
     :'<div class="empty">Seu orçamento está vazio.<br>Use “Adicionar” nos produtos.</div>';
-  $('#tCli').textContent=brl(r2(tc))+(cons?' *':'');
+  $('#tSub').textContent=brl(C.sub); $('#subRow').hidden=!(C.od>0);
+  $('#oDrow').hidden=!(C.od>0); $('#tDsc').textContent='− '+brl(C.od)+(odisc.t!=='R'?` (${fq(odisc.v)}%)`:'');
+  $('#oDv').value=document.activeElement===$('#oDv')?$('#oDv').value:(odisc.v>0?fq(odisc.v):''); $('#oDt').value=odisc.t==='R'?'R':'%';
+  $('#tCli').textContent=brl(C.total)+(C.cons?' *':'');
   const tk=PLAN==='drop'?td:ts; $('#tCost').textContent=brl(r2(tk)); $('#cCost').textContent=brl(r2(tk));
-  $('#tLucro').textContent=brl(r2(tc-tk)); document.querySelectorAll('.pn').forEach(e=>e.textContent=PL());
+  const lu=r2(C.total-tk); $('#tLucro').textContent=brl(lu); $('#tLucro').classList.toggle('neg',lu<0); document.querySelectorAll('.pn').forEach(e=>e.textContent=PL());
   const im=$('#pixImg'); if(tk>0){im.src=qrURL(pixPayload(r2(tk),'PED'+stamp()));im.style.visibility='visible'}else im.style.visibility='hidden';
 }
-function setQ(s,q){q=Math.max(0,Math.min(9999,parseInt(q)||0)); if(q)cart[s]=q; else delete cart[s]; cartUI(); render()}
+function setQ(s,q){q=pq(q);q=isFinite(q)?Math.max(0,Math.min(99999,q)):0; if(q>0)cart[s]=q; else delete cart[s]; cartUI(); render()}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2200)}
 
 function quoteText(){
   const L=lines(); if(!L.length)return '';
   const rev=$('#fRev').value.trim(), cli=$('#fCli').value.trim(), val=$('#fVal').value, obs=$('#fObs').value.trim(), tel=$('#fTel').value.trim();
   let t=`*Orçamento${rev?' – '+rev:''}*\n`+(cli?`Cliente: ${cli}\n`:'')+`Data: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
-  let tot=0;
-  for(const {p,q} of L){ const sub=p.vr==null?null:r2(p.vr*q); tot+=sub||0;
-    t+=`• ${q}x ${p.nome}\n  SKU ${p.sku} · ${brl(p.vr)} un · ${sub==null?'Consulte':brl(sub)}\n`; }
-  t+=`\n*Total: ${brl(r2(tot))}*\n`+(val?`Validade: ${val} dias\n`:'')+(obs?`Obs.: ${obs}\n`:'')+(tel?`Contato: ${tel}\n`:'');
+  const C=calc();
+  for(const l of C.L){ const {p,q}=l;
+    t+=`• ${fq(q)}x ${p.nome}\n  SKU ${p.sku} · ${brl(p.vr)} un · ${p.vr==null?'Consulte':(l.d>0?`~${brl(l.bruto)}~ ${brl(l.liq)} (desc. ${dlabel(disc[p.sku])})`:brl(l.liq))}\n`; }
+  if(C.od>0||C.idsc>0)t+=`\nSubtotal: ${brl(C.bruto)}\n`+(C.idsc>0?`Descontos nos itens: − ${brl(C.idsc)}\n`:'')+(C.od>0?`Desconto no pedido${odisc.t!=='R'?' ('+fq(odisc.v)+'%)':''}: − ${brl(C.od)}\n`:'');
+  t+=`\n*Total: ${brl(C.total)}*\n`+(val?`Validade: ${val} dias\n`:'')+(obs?`Obs.: ${obs}\n`:'')+(tel?`Contato: ${tel}\n`:'');
   return t;
 }
 async function thumb(p){
@@ -3110,14 +3138,24 @@ async function buildPDF(){
   let y=37; doc.setFontSize(11);doc.setTextColor(20);
   if(cli){doc.text('Cliente: '+cli,14,y);y+=6}
   const imgs=await Promise.all(L.map(l=>thumb(l.p)));
-  let tot=0;
-  const body=L.map(({p,q},i)=>{const sub=p.vr==null?null:r2(p.vr*q);tot+=sub||0;return ['',p.sku,p.nome,p.un,String(q),brl(p.vr),sub==null?'Consulte':brl(sub)]});
-  doc.autoTable({startY:y+2,head:[['Foto','SKU','Produto','Un','Qtd','Valor un.','Subtotal']],body,
-    styles:{fontSize:9,cellPadding:2,valign:'middle',minCellHeight:16},headStyles:{fillColor:[60,60,60],textColor:255},
-    columnStyles:{0:{cellWidth:17},1:{cellWidth:26},3:{cellWidth:10},4:{cellWidth:11,halign:'center'},5:{cellWidth:23,halign:'right'},6:{cellWidth:25,halign:'right'}},
+  const C=calc(), hasD=C.idsc>0;
+  const body=C.L.map(l=>{const {p,q}=l;const r=['',p.sku,p.nome,p.un,fq(q),brl(p.vr)];
+    if(hasD)r.push(l.d>0?'- '+brl(l.d)+(disc[p.sku].t!=='R'?`\n(${fq(disc[p.sku].v)}%)`:''):'-');
+    r.push(p.vr==null?'Consulte':brl(l.liq));return r});
+  const head=['Foto','SKU','Produto','Un','Qtd','Valor un.'].concat(hasD?['Desconto']:[],['Subtotal']);
+  const cs={0:{cellWidth:17},1:{cellWidth:24},3:{cellWidth:10},4:{cellWidth:13,halign:'center'},5:{cellWidth:22,halign:'right'}};
+  if(hasD){cs[6]={cellWidth:22,halign:'right',textColor:[194,87,26]};cs[7]={cellWidth:24,halign:'right'}}else cs[6]={cellWidth:25,halign:'right'};
+  doc.autoTable({startY:y+2,head:[head],body,
+    styles:{fontSize:9,cellPadding:2,valign:'middle',minCellHeight:16},headStyles:{fillColor:[60,60,60],textColor:255},columnStyles:cs,
     didDrawCell:d=>{if(d.section==='body'&&d.column.index===0&&imgs[d.row.index]){doc.addImage(imgs[d.row.index],'JPEG',d.cell.x+1.5,d.cell.y+1.5,13,13)}}});
   y=doc.lastAutoTable.finalY+8;
-  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(30);doc.text('Total: '+brl(r2(tot)),W-14,y,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(10.5);doc.setTextColor(70);
+  if(C.od>0||hasD){doc.text('Subtotal: '+brl(C.bruto),W-14,y,{align:'right'});y+=5.5;
+    if(hasD){doc.setTextColor(194,87,26);doc.text('Descontos nos itens: - '+brl(C.idsc),W-14,y,{align:'right'});y+=5.5}
+    if(C.od>0){doc.setTextColor(194,87,26);doc.text(`Desconto no pedido${odisc.t!=='R'?' ('+fq(odisc.v)+'%)':''}: - `+brl(C.od),W-14,y,{align:'right'});y+=5.5}
+    if(C.od>0&&hasD){doc.setTextColor(194,87,26);doc.text('Economia total: - '+brl(r2(C.bruto-C.total)),W-14,y,{align:'right'});y+=5.5}
+    y+=2.5}
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(30);doc.text('Total: '+brl(C.total),W-14,y,{align:'right'});
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(60);y+=8;
   if(val){doc.text(`Validade do orçamento: ${val} dias.`,14,y);y+=5}
   if(obs){const t=doc.splitTextToSize('Observações: '+obs,W-28);doc.text(t,14,y);y+=t.length*5}
@@ -3153,7 +3191,7 @@ function costText(){
   const L=lines(); if(!L.length)return '';
   const rev=$('#fRev').value.trim(), tel=$('#fTel').value.trim(); let tk=0;
   let t=`*Pedido para Santo Axé · plano ${PL()}*${rev?'\nRevendedor: '+rev:''}${tel?'\nWhatsApp: '+tel:''}\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
-  for(const {p,q} of L){const c=cost(p);tk+=c*q;t+=`• ${q}x ${p.nome}\n  SKU ${p.sku} · ${brl(c)} un. · ${brl(r2(c*q))}\n`}
+  for(const {p,q} of L){const c=cost(p);tk+=c*q;t+=`• ${fq(q)}x ${p.nome}\n  SKU ${p.sku} · ${brl(c)} un. · ${brl(r2(c*q))}\n`}
   tk=r2(tk);
   return t+`\n*Total a pagar: ${brl(tk)}*\n\nPIX (CNPJ): ${PIX}\nBTG Pactual · S A O COMERCIO LTDA\n\nPIX Copia e Cola:\n${pixPayload(tk,'PED'+stamp())}\n`;
 }
@@ -3168,11 +3206,11 @@ async function buildCostPDF(){
   let y=34;doc.setFontSize(11);doc.setTextColor(20);
   if(rev){doc.text('Revendedor: '+rev+(tel?'  ·  WhatsApp: '+tel:''),14,y);y+=6}
   let tk=0;
-  const body=L.map(({p,q})=>{const c=cost(p);tk+=c*q;return [p.sku,p.nome,p.un,String(q),brl(c),brl(r2(c*q))]});
+  const body=L.map(({p,q})=>{const c=cost(p);tk+=c*q;return [p.sku,p.nome,p.un,fq(q),brl(c),brl(r2(c*q))]});
   tk=r2(tk);
   doc.autoTable({startY:y+2,head:[['SKU','Produto','Un','Qtd',`Custo un. (${PN()})`,'Total']],body,
     styles:{fontSize:9,cellPadding:2,valign:'middle'},headStyles:{fillColor:[0,150,138],textColor:255},
-    columnStyles:{0:{cellWidth:26},2:{cellWidth:10},3:{cellWidth:11,halign:'center'},4:{cellWidth:28,halign:'right'},5:{cellWidth:26,halign:'right'}}});
+    columnStyles:{0:{cellWidth:26},2:{cellWidth:10},3:{cellWidth:13,halign:'center'},4:{cellWidth:28,halign:'right'},5:{cellWidth:26,halign:'right'}}});
   y=doc.lastAutoTable.finalY+8;
   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(0,120,110);
   doc.text(`Total a pagar (plano ${PL()}): ${brl(tk)}`,W-14,y,{align:'right'});y+=8;
@@ -3197,17 +3235,18 @@ const monday=d=>{const x=new Date(d);x.setDate(x.getDate()-((x.getDay()+6)%7));r
 function openSaleDlg(){
   if(!lines().length){toast('Adicione produtos ao orçamento');return}
   $('#sdDate').value=iso(new Date());$('#sdCli').value=$('#fCli').value;$('#sdPaid').checked=false;
-  const L=lines();$('#sdInfo').textContent=`${L.reduce((a,l)=>a+l.q,0)} itens · venda ${$('#tCli').textContent} · custo ${PN()} ${$('#tCost').textContent}`;
+  const L=lines();$('#sdInfo').textContent=`${L.length} produto(s) · venda ${$('#tCli').textContent} · custo ${PN()} ${$('#tCost').textContent}`;
   $('#saleDlg').classList.add('open');$('#sdDate').focus();
 }
 function registerSale(){
   const L=lines(); if(!L.length)return;
-  const items=L.map(({p,q})=>({sku:p.sku,nome:p.nome,un:p.un,q,vr:p.vr||0,drop:r2(p.at*DROP),scale:r2(p.at*SCALE)}));
+  const C=calc();
+  const items=C.L.map(l=>({sku:l.p.sku,nome:l.p.nome,un:l.p.un,q:l.q,vr:l.p.vr||0,liq:l.fin,desc:r2(l.bruto-l.fin),dsc:disc[l.p.sku]||null,drop:r2(l.p.at*DROP),scale:r2(l.p.at*SCALE)}));
   const sum=k=>r2(items.reduce((a,i)=>a+i[k]*i.q,0));
   sales.push({id:'V-'+stamp()+'-'+Math.random().toString(36).slice(2,5),data:$('#sdDate').value||iso(new Date()),cliente:$('#sdCli').value.trim(),
-    obs:$('#fObs').value.trim(),items,venda:sum('vr'),drop:sum('drop'),scale:sum('scale'),plano:PLAN,pago:$('#sdPaid').checked,criado:new Date().toISOString()});
+    obs:$('#fObs').value.trim(),items,venda:C.total,bruto:C.bruto,desconto:r2(C.bruto-C.total),odisc:odisc.v>0?{...odisc}:null,drop:sum('drop'),scale:sum('scale'),plano:PLAN,pago:$('#sdPaid').checked,criado:new Date().toISOString()});
   saveSales();$('#saleDlg').classList.remove('open');
-  if($('#sdClear').checked){cart={};$('#fCli').value='';store.set('fCli','');cartUI();render()}
+  if($('#sdClear').checked){cart={};disc={};odisc={v:0,t:'%'};$('#fCli').value='';store.set('fCli','');cartUI();render()}
   toast('Venda registrada em “Minhas vendas”');
 }
 function range(){
@@ -3224,7 +3263,7 @@ function perLabel(){const [a,b]=range(),v=$('#sPer').value;return v==='tudo'?'To
 function filtered(){const [a,b]=range(),p=$('#sPay').value;
   return sales.filter(s=>s.data>=a&&s.data<=b&&(!p||(p==='sim')===!!s.pago)).sort((x,y)=>y.data.localeCompare(x.data)||y.criado.localeCompare(x.criado))}
 const sc=s=>PLAN==='drop'?s.drop:s.scale;
-const tot=S=>({n:S.length,itens:S.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.q,0),0),venda:r2(S.reduce((a,s)=>a+s.venda,0)),drop:r2(S.reduce((a,s)=>a+s.drop,0)),scale:r2(S.reduce((a,s)=>a+s.scale,0)),
+const tot=S=>({n:S.length,itens:r3(S.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.q,0),0)),venda:r2(S.reduce((a,s)=>a+s.venda,0)),drop:r2(S.reduce((a,s)=>a+s.drop,0)),scale:r2(S.reduce((a,s)=>a+s.scale,0)),
   dropDue:r2(S.filter(s=>!s.pago).reduce((a,s)=>a+s.drop,0)),scaleDue:r2(S.filter(s=>!s.pago).reduce((a,s)=>a+s.scale,0)),
   custo:r2(S.reduce((a,s)=>a+sc(s),0)),due:r2(S.filter(s=>!s.pago).reduce((a,s)=>a+sc(s),0))});
 function grpKey(d){const g=$('#sGrp').value,x=pd(d);
@@ -3235,14 +3274,14 @@ function groups(S){const G=new Map();for(const s of S){const [k,l]=grpKey(s.data
   return [...G.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([k,g])=>({l:g.l,...tot(g.S)}))}
 function salesUI(){
   const S=filtered(),T=tot(S);
-  $('#kpis').innerHTML=[['Vendas',T.n+' · '+T.itens+' itens'],['Vendido (varejo)',brl(T.venda)],['Custo '+PL(),brl(T.custo)],['Lucro',brl(r2(T.venda-T.custo))]].map(([a,b])=>`<div class="kpi"><span>${a}</span><b>${b}</b></div>`).join('')+
+  $('#kpis').innerHTML=[['Vendas',T.n+' · '+fq(T.itens)+' itens'],['Vendido (varejo)',brl(T.venda)],['Custo '+PL(),brl(T.custo)],['Lucro',brl(r2(T.venda-T.custo))]].map(([a,b])=>`<div class="kpi"><span>${a}</span><b>${b}</b></div>`).join('')+
     `<div class="kpi due"><span>A pagar à Santo Axé (não pagas)</span><b>${brl(T.due)}</b></div>`;
   const G=groups(S);
   $('#grpT').innerHTML=G.length?`<thead><tr><th>Período</th><th class="n">Vendas</th><th class="n">Vendido</th><th class="n">Custo ${PN()}</th><th class="n">Lucro</th><th class="n">A pagar</th></tr></thead><tbody>`+
     G.map(g=>`<tr><td>${esc(g.l)}</td><td class="n">${g.n}</td><td class="n"><b>${brl(g.venda)}</b></td><td class="n">${brl(g.custo)}</td><td class="n">${brl(r2(g.venda-g.custo))}</td><td class="n">${brl(g.due)}</td></tr>`).join('')+'</tbody>'
     :'<tbody><tr><td class="empty">Nenhuma venda neste período.</td></tr></tbody>';
   $('#salesT').innerHTML=S.length?`<thead><tr><th>Data</th><th>Cliente</th><th>Itens</th><th class="n">Vendido</th><th class="n">Custo ${PN()}</th><th class="n">Lucro</th><th>Pagamento</th><th></th></tr></thead><tbody>`+
-    S.map(s=>`<tr><td style="white-space:nowrap">${fd(s.data)}</td><td>${esc(s.cliente||'—')}</td><td style="font-size:13px">${s.items.map(i=>esc(i.q+'x '+i.nome)).join('<br>')}</td>
+    S.map(s=>`<tr><td style="white-space:nowrap">${fd(s.data)}</td><td>${esc(s.cliente||'—')}</td><td style="font-size:13px">${s.items.map(i=>esc(fq(i.q)+'x '+i.nome)).join('<br>')}</td>
     <td class="n"><b>${brl(s.venda)}</b></td><td class="n">${brl(sc(s))}</td><td class="n">${brl(r2(s.venda-sc(s)))}</td>
     <td><button class="paid ${s.pago?'y':'n'}" data-pay="${esc(s.id)}">${s.pago?'✓ Paga':'Não paga'}</button></td>
     <td style="white-space:nowrap"><button class="btn" style="height:36px" data-reopen="${esc(s.id)}">Abrir</button> <button class="rm" data-del="${esc(s.id)}">Excluir</button></td></tr>`).join('')+'</tbody>':'';
@@ -3254,14 +3293,14 @@ function repPDF(){
   doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(30);doc.text('Relatório de vendas · plano '+PL(),14,17);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80);doc.text(`${rev?rev+' · ':''}${perLabel()} · gerado em ${new Date().toLocaleDateString('pt-BR')}`,14,23);
   doc.autoTable({startY:29,theme:'plain',styles:{fontSize:10.5,cellPadding:1.5},columnStyles:{1:{halign:'right',fontStyle:'bold'}},tableWidth:110,
-    body:[['Vendas / itens',`${T.n} / ${T.itens}`],['Vendido (varejo)',brl(T.venda)],['Custo '+PL(),brl(T.custo)],['Lucro',brl(r2(T.venda-T.custo))],['A pagar à Santo Axé (não pagas)',brl(T.due)]]});
+    body:[['Vendas / itens',`${T.n} / ${fq(T.itens)}`],['Vendido (varejo)',brl(T.venda)],['Custo '+PL(),brl(T.custo)],['Lucro',brl(r2(T.venda-T.custo))],['A pagar à Santo Axé (não pagas)',brl(T.due)]]});
   const hd={fillColor:[60,60,60],textColor:255},st={fontSize:8.5,cellPadding:1.8};
   doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Período','Vendas','Vendido','Custo '+PN(),'Lucro','A pagar']],headStyles:hd,styles:st,
     columnStyles:{1:{halign:'center'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}},
     body:groups(S).map(g=>[g.l,g.n,brl(g.venda),brl(g.custo),brl(r2(g.venda-g.custo)),brl(g.due)])});
   doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Data','Cliente','Itens','Vendido','Custo '+PN(),'Lucro','Pago']],headStyles:hd,styles:st,
     columnStyles:{0:{cellWidth:19},1:{cellWidth:30},3:{cellWidth:23,halign:'right'},4:{cellWidth:22,halign:'right'},5:{cellWidth:22,halign:'right'},6:{cellWidth:11,halign:'center'}},
-    body:S.map(s=>[fd(s.data),s.cliente||'-',s.items.map(i=>`${i.q}x ${i.nome}`).join('\n'),brl(s.venda),brl(sc(s)),brl(r2(s.venda-sc(s))),s.pago?'Sim':'Não'])});
+    body:S.map(s=>[fd(s.data),s.cliente||'-',s.items.map(i=>`${fq(i.q)}x ${i.nome}`).join('\n'),brl(s.venda),brl(sc(s)),brl(r2(s.venda-sc(s))),s.pago?'Sim':'Não'])});
   let y=doc.lastAutoTable.finalY+8;
   if(T.due>0)pixBox(doc,y,W,T.due,'REL'+stamp());
   doc.save(`relatorio-vendas-${fname()}.pdf`);toast('Relatório baixado');
@@ -3269,8 +3308,8 @@ function repPDF(){
 function repCSV(){
   const S=filtered();if(!S.length){toast('Nenhuma venda no período');return}
   const n=v=>String(v.toFixed(2)).replace('.',','),q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
-  const rows=[['Data','Venda','Cliente','SKU','Produto','Un','Qtd','Preço varejo','Total varejo',`Custo un. ${PN()}`,`Total custo ${PN()}`,'Lucro','Pago à Santo Axé']];
-  for(const s of S)for(const i of s.items){const c=i[PLAN];rows.push([fd(s.data),s.id,s.cliente,i.sku,i.nome,i.un,i.q,n(i.vr),n(i.vr*i.q),n(c),n(c*i.q),n((i.vr-c)*i.q),s.pago?'Sim':'Não'])}
+  const rows=[['Data','Venda','Cliente','SKU','Produto','Un','Qtd','Preço varejo','Desconto','Total vendido',`Custo un. ${PN()}`,`Total custo ${PN()}`,'Lucro','Pago à Santo Axé']];
+  for(const s of S)for(const i of s.items){const c=i[PLAN];const lv=i.liq??i.vr*i.q;rows.push([fd(s.data),s.id,s.cliente,i.sku,i.nome,i.un,String(i.q).replace('.',','),n(i.vr),n(i.desc||0),n(lv),n(c),n(c*i.q),n(lv-c*i.q),s.pago?'Sim':'Não'])}
   dl(new Blob(['\ufeff'+rows.map(r=>r.map(q).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}),`vendas-${fname()}.csv`);toast('Planilha baixada');
 }
 const fname=()=>$('#sPer').value==='tudo'?'completo':range().join('_a_');
@@ -3289,9 +3328,9 @@ drawer.addEventListener('click',e=>{if(e.target.closest('[data-close]')){drawer.
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer.classList.remove('open');$('#modal').classList.remove('open');$('#saleDlg').classList.remove('open')}});
 document.addEventListener('click',e=>{
   const t=e.target.closest('button,[data-open]'); if(!t)return;
-  if(t.dataset.dq){const i=t.parentElement.querySelector('input');i.value=Math.max(1,(parseInt(i.value)||1)+ +t.dataset.d)}
-  else if(t.dataset.add){const box=t.closest('.add'),q=parseInt(box.querySelector('input').value)||1;cart[t.dataset.add]=(cart[t.dataset.add]||0)+q;cartUI();render();toast('Adicionado ao orçamento');$('#modal').classList.remove('open')}
-  else if(t.dataset.cq){setQ(t.dataset.cq,(cart[t.dataset.cq]||0)+ +t.dataset.d)}
+  if(t.dataset.dq){const i=t.parentElement.querySelector('input'),v=pq(i.value)>0?pq(i.value):1,n=r3(v+ +t.dataset.d);i.value=fq(n>0?n:v)}
+  else if(t.dataset.add){const box=t.closest('.add'),q=pq(box.querySelector('input').value)>0?pq(box.querySelector('input').value):1;cart[t.dataset.add]=r3((cart[t.dataset.add]||0)+q);cartUI();render();toast('Adicionado ao orçamento');$('#modal').classList.remove('open')}
+  else if(t.dataset.cq){setQ(t.dataset.cq,r3((cart[t.dataset.cq]||0)+ +t.dataset.d))}
   else if(t.dataset.rm){setQ(t.dataset.rm,0)}
   else if(t.dataset.open){const p=BY[t.dataset.open];$('#mbox').innerHTML=`<div class="ph">${p.img?`<img src="${esc(src(p))}" alt="${esc(p.nome)}" data-fb="${esc(ini(p.nome))}">`:`<div class="noimg">${esc(ini(p.nome))}</div>`}</div>
     <div class="info"><button class="x" style="align-self:flex-end" data-mclose aria-label="Fechar">×</button><div class="nm" style="font-size:20px">${esc(p.nome)}</div>
@@ -3299,8 +3338,13 @@ document.addEventListener('click',e=>{
   else if(t.dataset.mclose!==undefined){$('#modal').classList.remove('open')}
 });
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')e.currentTarget.classList.remove('open')});
-document.addEventListener('change',e=>{const s=e.target.dataset.ci;if(s)setQ(s,e.target.value)});
-$('#clearBtn').onclick=()=>{if(!Object.keys(cart).length)return;if(confirm('Limpar todos os itens do orçamento?')){cart={};cartUI();render()}};
+document.addEventListener('change',e=>{const ds=e.target.dataset;
+  if(ds.ci)setQ(ds.ci,e.target.value);
+  else if(ds.dv||ds.dt){const s=ds.dv||ds.dt,box=e.target.closest('.dsc'),v=pq(box.querySelector('input').value),tp=box.querySelector('select').value;
+    if(v>0||tp==='R')disc[s]={v:v>0?v:0,t:tp};else delete disc[s];cartUI()}});
+function setOD(){const v=pq($('#oDv').value);odisc={v:v>0?v:0,t:$('#oDt').value};$('#oDv').blur();cartUI()}
+$('#oDv').addEventListener('change',setOD);$('#oDt').addEventListener('change',setOD);
+$('#clearBtn').onclick=()=>{if(!Object.keys(cart).length)return;if(confirm('Limpar todos os itens do orçamento?')){cart={};disc={};odisc={v:0,t:'%'};cartUI();render()}};
 $('#pdfBtn').onclick=async()=>{const r=await buildPDF();if(r){r.doc.save(r.name);toast('PDF baixado')}};
 $('#shareBtn').onclick=async()=>sharePDF(await buildPDF());
 $('#cpdfBtn').onclick=async()=>{const r=await buildCostPDF();if(r){r.doc.save(r.name);toast('PDF do pedido baixado')}};
@@ -3314,7 +3358,7 @@ for(const id of ['sPer','sGrp','sPay','sFrom','sTo'])$('#'+id).onchange=()=>{con
 $('#sales').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.pay){const s=sales.find(x=>x.id===b.dataset.pay);s.pago=!s.pago;saveSales();salesUI()}
   else if(b.dataset.del){const s=sales.find(x=>x.id===b.dataset.del);if(confirm(`Excluir a venda de ${fd(s.data)} (${brl(s.venda)})?`)){sales=sales.filter(x=>x!==s);saveSales();salesUI()}}
-  else if(b.dataset.reopen){const s=sales.find(x=>x.id===b.dataset.reopen);cart={};for(const i of s.items)if(BY[i.sku])cart[i.sku]=i.q;$('#fCli').value=s.cliente;store.set('fCli',s.cliente);cartUI();render();
+  else if(b.dataset.reopen){const s=sales.find(x=>x.id===b.dataset.reopen);cart={};disc={};for(const i of s.items)if(BY[i.sku]){cart[i.sku]=i.q;if(i.dsc)disc[i.sku]={...i.dsc}}odisc=s.odisc?{...s.odisc}:{v:0,t:'%'};$('#fCli').value=s.cliente;store.set('fCli',s.cliente);cartUI();render();
     $('#salesX').click();$('#cartBtn').click();toast('Venda aberta no orçamento (para reemitir PDFs)')}});
 $('#repPdf').onclick=repPDF;$('#repCsv').onclick=repCSV;
 $('#bkOut').onclick=()=>{dl(new Blob([JSON.stringify({app:'santo-axe-revendedor',versao:1,gerado:new Date().toISOString(),loja:$('#fRev').value,sales},null,1)],{type:'application/json'}),`backup-vendas-${iso(new Date())}.json`);toast('Backup baixado')};
