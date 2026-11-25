@@ -72,11 +72,20 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
 .drawer{position:fixed;inset:0;z-index:40;display:none}
 .drawer.open{display:block}
 .shade{position:absolute;inset:0;background:#0007}
-.panel{position:absolute;right:0;top:0;bottom:0;width:min(560px,100%);background:var(--bg);display:flex;flex-direction:column;box-shadow:-10px 0 30px #0003}
+.panel{position:absolute;right:0;top:0;bottom:0;height:100dvh;width:min(680px,100%);background:var(--bg);display:flex;flex-direction:column;box-shadow:-10px 0 30px #0003}
 .ph1{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
 .ph1 h2{margin:0;font-size:22px}
 .x{width:44px;height:44px;border:0;background:none;font-size:26px}
-.pbody{overflow:auto;padding:14px 16px;flex:1}
+.pbody{overflow-y:auto;padding:12px 16px 20px;flex:1;min-height:0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.blk{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.bh,.blk summary{font-weight:700;font-size:15px;margin-bottom:8px}.blk summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px;margin:0;list-style:none}.blk summary::-webkit-details-marker{display:none}.blk summary:after{content:'▾';color:var(--mute)}details[open].blk summary:after{content:'▴'}details[open].blk summary{margin-bottom:10px}.blk summary small{font-weight:400;color:var(--mute);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+.blk .fields{margin-bottom:0}.blk .fields input,.blk .fields textarea{font-size:16px}.blk #items .item:last-child{border-bottom:0}
+.logorow{display:flex;gap:8px;align-items:center}.logorow input{height:auto;padding:8px;flex:1;min-width:0}
+.cusmode .cliblk{display:none}
+body:has(.drawer.open) #toast{bottom:96px}
+.pbar{display:flex;align-items:center;gap:8px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:2px solid var(--brand);background:var(--card);box-shadow:0 -6px 16px #0001}
+.pbar .bt{flex:1;display:flex;flex-direction:column;line-height:1.15;min-width:0}.pbar .bt span{font-size:12px;color:var(--mute)}.pbar .bt b{font-size:21px;color:var(--brand2);white-space:nowrap}.pbar .btn{height:46px;padding:0 14px}
+@media(max-width:600px){.blk .fields{grid-template-columns:1fr}.ph1{padding:8px 12px}.tabs button{height:42px}.pbody{padding:10px 10px 16px}.blk{padding:10px 12px}.pbar{padding-left:12px;padding-right:12px}}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .fields label{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:4px}
 .fields .w{grid-column:1/-1}
@@ -101,7 +110,7 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
 .sum .odsc{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}.sum .odsc .dsc{font-size:14px}.dline{color:#c2571a;font-size:14px}
 .neg{color:#c62828!important}
 .sum .row[hidden]{display:none}
-.sum{border-top:2px solid var(--brand);padding:12px 16px;background:var(--card)}
+.sum .row{padding:2px 0}.sum .trow{border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
 .sum .row{display:flex;justify-content:space-between;gap:10px}
 .sum .tot{font-size:22px;font-weight:800;color:var(--brand2)}
 .sum .cr{display:none;color:var(--cost);font-size:14px}
@@ -171,23 +180,25 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
     <div class="ph1"><h2>Orçamento</h2><button class="x" data-close aria-label="Fechar">×</button></div>
     <div class="tabs" role="tablist"><button role="tab" id="tabCli" aria-selected="true">Para o cliente</button><button role="tab" id="tabCus" aria-selected="false">Meu pedido (custo)</button></div>
     <div class="pbody">
+      <details class="blk" id="lojaBox"><summary><span>🏪 Dados da sua loja</span><small id="lojaSum"></small></summary>
       <div class="fields">
-        <label class="w">Logo da sua loja (opcional, sai no orçamento do cliente)<span style="display:flex;gap:8px;align-items:center"><input id="fLogo" type="file" accept="image/*" style="height:auto;padding:8px;flex:1"><button class="btn" id="logoRm" type="button">Remover</button></span><img id="logoPrev" alt="" style="max-height:48px;max-width:200px;display:none;margin-top:4px"></label>
+        <label class="w">Logo da sua loja (opcional, sai no orçamento do cliente)<span class="logorow"><input id="fLogo" type="file" accept="image/*"><button class="btn" id="logoRm" type="button">Remover</button></span><img id="logoPrev" alt="" style="max-height:48px;max-width:200px;display:none;margin-top:4px"></label>
         <label>Seu nome / loja<input id="fRev" autocomplete="organization"></label>
         <label>Seu WhatsApp<input id="fTel" inputmode="tel" autocomplete="tel"></label>
+      </div></details>
+      <div class="blk cliblk"><div class="bh">👤 Cliente</div>
+      <div class="fields">
         <label>Nome do cliente<input id="fCli"></label>
         <label>Validade (dias)<input id="fVal" type="number" min="1" value="7"></label>
-        <label class="w">Observações para o cliente<textarea id="fObs" placeholder="Ex.: frete a combinar, pagamento via Pix…"></textarea></label>
-      </div>
-      <div id="items"></div>
-    </div>
-    <div class="sum">
-      <button class="btn pri" id="saleBtn" style="width:100%;justify-content:center;background:#2e7d32;border-color:#2e7d32;margin-bottom:10px">✔ Virou venda: registrar</button>
+        <label class="w">Observações para o cliente<textarea id="fObs" rows="2" placeholder="Ex.: frete a combinar, pagamento via Pix…"></textarea></label>
+      </div></div>
+      <div class="blk"><div class="bh">🛒 Itens</div><div id="items"></div></div>
+      <div class="sum blk">
       <div class="vcli">
-      <div class="row" id="subRow" style="font-size:14px"><span>Subtotal</span><span id="tSub">R$ 0,00</span></div>
+      <div class="row" id="subRow"><span>Subtotal</span><span id="tSub">R$ 0,00</span></div>
       <div class="odsc"><span>Desconto no pedido</span><span class="dsc"><input id="oDv" inputmode="decimal" placeholder="0" aria-label="Desconto no pedido"><select id="oDt" aria-label="Tipo de desconto"><option value="%">%</option><option value="R">R$</option></select></span></div>
       <div class="row dline" id="oDrow" hidden><span>Desconto</span><span id="tDsc"></span></div>
-      <div class="row"><span>Total para o cliente</span><span class="tot" id="tCli">R$ 0,00</span></div>
+      <div class="row trow"><span>Total para o cliente</span><span class="tot" id="tCli">R$ 0,00</span></div>
       <div class="row cr"><span>Seu custo <span class="pn"></span></span><span id="tCost"></span></div>
       <div class="row cr"><b>Lucro estimado</b><b id="tLucro"></b></div>
       <div class="acts">
@@ -196,11 +207,12 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
         <button class="btn" id="waBtn">WhatsApp (texto)</button>
         <button class="btn" id="copyBtn">Copiar texto</button>
       </div>
+      <button class="btn pri" id="saleBtn" style="width:100%;justify-content:center;background:#2e7d32;border-color:#2e7d32;margin-top:8px">✔ Virou venda: registrar</button>
       <button class="btn" id="clearBtn" style="width:100%;margin-top:8px;justify-content:center;color:var(--warn)">Limpar orçamento</button>
       <p class="note">O PDF e as mensagens mostram só os dados da sua loja, SKU, produto, quantidade e preço de varejo. Nada da Santo Axé nem dos seus custos aparece para o cliente.</p>
       </div>
       <div class="vcus" hidden>
-      <div class="row"><span>Total a pagar · plano <b class="pn"></b></span><span class="tot" id="cCost"></span></div>
+      <div class="row trow"><span>Total a pagar · plano <b class="pn"></b></span><span class="tot" id="cCost"></span></div>
       <div class="pixqr"><img id="pixImg" alt="QR Code PIX"><div class="pix"><b>Pagamento via PIX</b><br>Chave (CNPJ): <b>42.225.916/0001-90</b><br>Banco BTG Pactual · S A O COMERCIO LTDA<br><span class="sku">O QR Code já vem com o valor do pedido.</span></div></div>
       <div class="acts">
         <button class="btn pri" id="cpdfBtn">⬇ PDF do pedido</button>
@@ -210,7 +222,9 @@ table.list{width:100%;border-collapse:collapse;background:var(--card);border-rad
       </div>
       <p class="note">Documento para você pagar a Santo Axé: só quantidades e custos Drop e Scale, sem preço de varejo.</p>
       </div>
+      </div>
     </div>
+    <div class="pbar"><div class="bt"><span id="barL">Total para o cliente</span><b id="barT">R$ 0,00</b></div><button class="btn pri" id="barPdf">⬇ PDF</button><button class="btn pri" id="barShare" aria-label="Compartilhar">↗ Enviar</button></div>
   </aside>
 </div>
 
@@ -3091,7 +3105,8 @@ function cartUI(){
   $('#oDrow').hidden=!(C.od>0); $('#tDsc').textContent='− '+brl(C.od)+(odisc.t!=='R'?` (${fq(odisc.v)}%)`:'');
   $('#oDv').value=document.activeElement===$('#oDv')?$('#oDv').value:(odisc.v>0?fq(odisc.v):''); $('#oDt').value=odisc.t==='R'?'R':'%';
   $('#tCli').textContent=brl(C.total)+(C.cons?' *':'');
-  const tk=PLAN==='drop'?td:ts; $('#tCost').textContent=brl(r2(tk)); $('#cCost').textContent=brl(r2(tk));
+  const cusm=$('#drawer').classList.contains('cusmode');$('#barL').textContent=cusm?'Total a pagar · '+PN():'Total para o cliente';
+  const tk=PLAN==='drop'?td:ts; $('#tCost').textContent=brl(r2(tk)); $('#cCost').textContent=brl(r2(tk));$('#barT').textContent=cusm?brl(r2(tk)):$('#tCli').textContent;
   const lu=r2(C.total-tk); $('#tLucro').textContent=brl(lu); $('#tLucro').classList.toggle('neg',lu<0); document.querySelectorAll('.pn').forEach(e=>e.textContent=PL());
   const im=$('#pixImg'); if(tk>0){im.src=qrURL(pixPayload(r2(tk),'PED'+stamp()));im.style.visibility='visible'}else im.style.visibility='hidden';
 }
@@ -3223,7 +3238,7 @@ async function sharePDF(r){
   r.doc.save(r.name);toast('PDF baixado: anexe no WhatsApp ou e-mail');
 }
 function setTab(cus){$('#tabCli').setAttribute('aria-selected',!cus);$('#tabCus').setAttribute('aria-selected',cus);
-  document.querySelector('.vcli').hidden=cus;document.querySelector('.vcus').hidden=!cus;$('#drawer').classList.toggle('cusmode',cus)}
+  document.querySelector('.vcli').hidden=cus;document.querySelector('.vcus').hidden=!cus;$('#drawer').classList.toggle('cusmode',cus);cartUI()}
 
 /* ---------- vendas ---------- */
 let sales=store.get('sales',[]);
@@ -3365,6 +3380,11 @@ $('#bkOut').onclick=()=>{dl(new Blob([JSON.stringify({app:'santo-axe-revendedor'
 $('#bkIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!Array.isArray(j.sales))throw 0;
   const ids=new Set(sales.map(s=>s.id));let n=0;for(const s of j.sales)if(s&&s.id&&!ids.has(s.id)){sales.push(s);n++}saveSales();salesUI();toast(`${n} venda(s) restaurada(s)`)}catch(err){toast('Arquivo de backup inválido')}e.target.value=''};
 $('#plan').value=PLAN;$('#plan').onchange=e=>{PLAN=e.target.value;store.set('plan',PLAN);cartUI();render();if($('#sales').classList.contains('open'))salesUI();toast('Plano '+PL()+' selecionado')};
+$('#barPdf').onclick=()=>($('#drawer').classList.contains('cusmode')?$('#cpdfBtn'):$('#pdfBtn')).click();
+$('#barShare').onclick=()=>($('#drawer').classList.contains('cusmode')?$('#cshareBtn'):$('#shareBtn')).click();
+function lojaSum(){const r=$('#fRev').value.trim(),w=$('#fTel').value.trim();$('#lojaSum').textContent=r?[r,w].filter(Boolean).join(' · '):'preencha uma vez'}
+$('#fRev').addEventListener('input',lojaSum);$('#fTel').addEventListener('input',lojaSum);
+$('#cartBtn').addEventListener('click',()=>{lojaSum();$('#lojaBox').open=!$('#fRev').value.trim();$('.pbody').scrollTop=0});
 $('#tabCli').onclick=()=>setTab(false);$('#tabCus').onclick=()=>setTab(true);
 function showLogo(){const l=store.get('logo',null),i=$('#logoPrev');i.style.display=l?'block':'none';if(l)i.src=l}
 $('#fLogo').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const u=URL.createObjectURL(f),im=await loadImg(u);
